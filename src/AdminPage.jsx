@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Download, ImagePlus, LogOut, Plus, Save, ShieldCheck, Trash2, Upload, X } from "lucide-react";
-import { getInitialCatalog, loadCatalog, saveCatalog, fetchCatalog, upsertCatalog, uploadProductImages } from "./catalogStore";
+import { getInitialCatalog, fetchRemoteCatalog, saveCatalog } from "./catalogStore";
 
 async function checkAdminSession() {
   try {
@@ -76,15 +76,24 @@ function Login({ onLogin }) {
 }
 
 function ImageManager({ product, update }) {
-  const addImages = async (files) => {
+  const addImages = (files) => {
     const selected = Array.from(files || []).filter(f => f.type.startsWith("image/"));
     if (!selected.length) return;
-    try {
-      const urls = await uploadProductImages(selected, product.id);
-      const all = [product.image, ...(product.galleryImages || []), ...urls].filter(Boolean);
-      update(product.id, "image", all[0] || "");
-      update(product.id, "galleryImages", [...new Set(all.slice(1))]);
-    } catch (e) { alert(`Image upload failed: ${e.message}`); }
+    let remaining = selected.length;
+    const urls = [];
+    selected.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        urls.push(reader.result);
+        remaining -= 1;
+        if (!remaining) {
+          const all = [product.image, ...(product.galleryImages || []), ...urls].filter(Boolean);
+          update(product.id, "image", all[0] || "");
+          update(product.id, "galleryImages", [...new Set(all)]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
   };
   const removeImage = (url) => {
     const all = [product.image, ...(product.galleryImages || [])].filter(Boolean).filter(x => x !== url);
@@ -114,12 +123,13 @@ function ImageManager({ product, update }) {
 export default function AdminPage() {
   const [authenticated, setAuthenticated] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
-  const [items, setItems] = useState(() => loadCatalog(getInitialCatalog()));
-  const [cloudLoading, setCloudLoading] = useState(false);
+  const [items, setItems] = useState(() => getInitialCatalog());
+  const [loadingCatalog, setLoadingCatalog] = useState(true);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (authenticated) {
+      fetchRemoteCatalog(getInitialCatalog()).then(setItems).finally(() => setLoadingCatalog(false));
       setCheckingSession(false);
       return;
     }
@@ -129,7 +139,6 @@ export default function AdminPage() {
       }
       setCheckingSession(false);
     });
-    if (authenticated) fetchCatalog(getInitialCatalog()).then(setItems).catch(() => {});
   }, [authenticated]);
   const [query, setQuery] = useState("");
 
@@ -184,9 +193,11 @@ export default function AdminPage() {
         isTop10: Boolean(p.isTop10),
       };
     });
-    setCloudLoading(true);
-    upsertCatalog(cleaned).then(rows => { saveCatalog(rows); setItems(rows); setSaved(true); }).catch(e => alert(`Database save failed: ${e.message}`)).finally(() => setCloudLoading(false));
-    setTimeout(() => setSaved(false), 2200);
+    saveCatalog(cleaned).then(() => {
+      setItems(cleaned);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2200);
+    }).catch((error) => alert(`Could not save globally: ${error.message}`));
   };
 
   const exportCsv = () => {
@@ -217,7 +228,7 @@ export default function AdminPage() {
         <div className="admin-actions">
           <button className="admin-btn secondary" onClick={logout}><LogOut size={16}/> Log out</button>
           <button className="admin-btn secondary" onClick={exportCsv}><Download size={16}/> Export CSV</button>
-          <button className="admin-btn primary" onClick={save}><Save size={16}/> {cloudLoading ? "Saving…" : saved ? "Saved!" : "Save catalog"}</button>
+          <button className="admin-btn primary" onClick={save}><Save size={16}/> {saved ? "Saved!" : "Save catalog"}</button>
         </div>
       </div>
 

@@ -38,7 +38,7 @@ import heroFood from "./assets/hero-posters/food-clean-green.png";
 import heroStock from "./assets/hero-posters/stock-up-days.png";
 import heroWellness from "./assets/hero-posters/wellness-balance.png";
 import AdminPage from "./AdminPage";
-import { getInitialCatalog, loadCatalog, fetchCatalog } from "./catalogStore";
+import { getInitialCatalog, fetchRemoteCatalog } from "./catalogStore";
 import "./styles.css";
 
 const WHATSAPP_NUMBER = "919244335428";
@@ -55,10 +55,8 @@ const categories = [
   "Personal Care",
 ];
 const initialProducts = getInitialCatalog();
-let products = loadCatalog(initialProducts);
-
-// Today's Top 10 is controlled from the protected admin panel.
-let specialDeals = products.filter((p) => p.isTop10).sort((a,b) => (a.top10_rank||999)-(b.top10_rank||999)).slice(0, 10);
+let products = initialProducts;
+let specialDeals = products.filter((p) => p.isTop10).slice(0, 10);
 
 const heroSlides = [
   // Default hero: Stock Up Days poster. Other posters are shown only when
@@ -1259,8 +1257,8 @@ function SpecialDealsPage({ onOpen, onAdd, onWish, wished, onSeen, onBack }) {
   );
 }
 function App() {
-  const [, setCatalogVersion] = useState(0);
-  useEffect(() => { fetchCatalog(initialProducts).then((rows) => { products = rows; specialDeals = rows.filter((p) => p.isTop10).sort((a,b) => (a.top10_rank||999)-(b.top10_rank||999)).slice(0, 10); setCatalogVersion(v => v + 1); }).catch(() => {}); }, []);
+  const [, refreshCatalog] = useState(0);
+  useEffect(() => { fetchRemoteCatalog(initialProducts).then((remote) => { products = remote; specialDeals = remote.filter((p) => p.isTop10).slice(0, 10); refreshCatalog((x) => x + 1); }); }, []);
   const [q, setQ] = useState("");
   const [page, setPage] = useState(() => {
     if (window.location.hash === "#admin") return "admin";
